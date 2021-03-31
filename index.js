@@ -109,6 +109,7 @@ function getDts(receivedTimestamp, windowLengthHours) {
   if (etDay.toString().length == 1) etDay = `0${etDay}`;
 
   const etHours = etDateTimeSplit[1].split(':')[0];
+
   let offsetHours;
   if (utcDate.getUTCHours() < parseInt(etHours)) {
     offsetHours = parseInt(etHours) - (utcDate.getUTCHours() + 24);
@@ -162,11 +163,7 @@ function getDts(receivedTimestamp, windowLengthHours) {
 }
 
 exports.handler = async (event) => {
-  const response = {
-    statusCode: 200,
-    body: event,
-  };
-  console.log({response: JSON.stringify(response)});
+  console.log({event: JSON.stringify(event)});
 
   const WINDOW_LENGTH_HOURS = 2;
 
@@ -176,7 +173,8 @@ exports.handler = async (event) => {
   //   "sCustomerEmail": "first.last@example.com",
   //   "sCustomerNumber": "+1 (555) 555-5555"
   // }
-  const message = response.body['Records'][0]['Sns']['Message'];
+  const message = event['Records'][0]['Sns']['Message'];
+  console.log({message});
   const messageJson = JSON.parse(message);
   const {
     startDt,
@@ -184,7 +182,7 @@ exports.handler = async (event) => {
   } = getDts(messageJson.sReceivedTimestamp, WINDOW_LENGTH_HOURS);
 
   const assertion = generateAssertion();
-  getToken(assertion)
+  return getToken(assertion)
       .then((response) => response.text())
       .then((tokenBody) => {
         console.log(tokenBody);
@@ -200,10 +198,10 @@ exports.handler = async (event) => {
                             '\n' +
                             uuidv4();
 
-        createEvent(summary, description, startDt, endDt, token)
+        return createEvent(summary, description, startDt, endDt, token)
             .then((response) => response.text())
-            .then((eventBody) => console.log(eventBody));
-      });
-
-  return 0;
+            .then((eventBody) => console.log(eventBody))
+            .catch((error) => console.log(error));
+      })
+      .catch((error) => console.log(error));
 };
