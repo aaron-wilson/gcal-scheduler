@@ -83,7 +83,7 @@ async function createEvent(summary, description, startDt, endDt, token) {
 /**
  * @return {string}
  */
-function uuidv4() {
+function uuid4() {
   return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
     const r = Math.random() * 16 | 0; const v = c == 'x' ? r : (r & 0x3 | 0x8);
     return v.toString(16);
@@ -188,15 +188,13 @@ exports.handler = async (event) => {
         console.log(tokenBody);
 
         const token = (JSON.parse(tokenBody)).access_token;
-        endDt.setHours(startDt.getHours() + 2);
-
         const summary = messageJson.sCustomerName;
         const description = messageJson.sCustomerEmail +
                             '\n' +
                             messageJson.sCustomerNumber +
                             '\n' +
                             '\n' +
-                            uuidv4();
+                            uuid4();
 
         return createEvent(summary, description, startDt, endDt, token)
             .then((response) => response.text())
