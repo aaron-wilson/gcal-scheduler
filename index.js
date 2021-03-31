@@ -1,16 +1,16 @@
-/* eslint-disable require-jsdoc */
 const jwt = require('jsonwebtoken');
 const fetch = require('node-fetch');
 require('dotenv').config();
 
+/**
+ * @return {string}
+ */
 function generateAssertion() {
   return jwt.sign({
     'iss': process.env.SERVICE_ACCOUNT,
     'sub': process.env.SERVICE_ACCOUNT,
     'aud': 'https://www.googleapis.com/oauth2/v4/token',
     'scope': 'https://www.googleapis.com/auth/calendar',
-  // "iat": 1617142600,
-  // "exp": 1617145600,
   },
   process.env.PRIVATE_KEY.replace(/\\n/g, '\n'),
   {
@@ -23,6 +23,9 @@ function generateAssertion() {
   });
 }
 
+/**
+ * @return {string}
+ */
 function generateFormBody(object) {
   const formBody = [];
   for (const property in object) {
@@ -33,6 +36,9 @@ function generateFormBody(object) {
   return formBody.join('&');
 }
 
+/**
+ * @return {Promise}
+ */
 async function getToken(assertion) {
   const response = await fetch('https://www.googleapis.com/oauth2/v4/token', {
     method: 'POST',
@@ -45,10 +51,12 @@ async function getToken(assertion) {
   return response;
 }
 
+/**
+ * @return {Promise}
+ */
 async function createEvent(summary, description, startDt, endDt, token) {
   const requestBody = {
     summary,
-    // 'location': '',
     description,
     'start': {
       'dateTime': startDt.toISOString(),
@@ -58,39 +66,7 @@ async function createEvent(summary, description, startDt, endDt, token) {
       'dateTime': endDt.toISOString(),
       'timeZone': 'America/New_York',
     },
-    // 'recurrence': [
-    //     'RRULE:FREQ=DAILY;COUNT=2'
-    // ],
-    // 'attendees': [
-    //   {'email': 'a@example.com'},
-    //   {'email': 'b@example.com'},
-    // ],
-    // 'reminders': {
-    //   'useDefault': true,
-    //   'overrides': [{
-    //     'method': 'email',
-    //     'minutes': 15,
-    //   },
-    //   {
-    //     'method': 'popup',
-    //     'minutes': 10,
-    //   },
-    //   ],
-    // },
   };
-
-  // calendar.events.insert({
-  //   auth: auth,
-  //   calendarId: 'primary',
-  //   resource: event,
-  // }, function(err, event) {
-  //   if (err) {
-  //     console.log('There was an error contacting the Calendar service: ' + err);
-  //     return;
-  //   }
-  //   console.log('Event created: %s', event.htmlLink);
-  // });
-
   console.log({requestBody});
 
   const response = await fetch(`https://www.googleapis.com/calendar/v3/calendars/${process.env.CALENDAR_ID}/events`, {
@@ -104,6 +80,9 @@ async function createEvent(summary, description, startDt, endDt, token) {
   return response;
 }
 
+/**
+ * @return {string}
+ */
 function uuidv4() {
   return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
     const r = Math.random() * 16 | 0; const v = c == 'x' ? r : (r & 0x3 | 0x8);
@@ -111,6 +90,9 @@ function uuidv4() {
   });
 }
 
+/**
+ * @return {Object}
+ */
 function getDts(receivedTimestamp, windowLengthHours) {
   const utcDate = new Date(receivedTimestamp);
   const etDateTimeSplit = utcDate.toLocaleString('en-US', {
@@ -179,57 +161,49 @@ function getDts(receivedTimestamp, windowLengthHours) {
   return {startDt, endDt};
 }
 
-console.log(process.env);
+exports.handler = async (event) => {
+  const response = {
+    statusCode: 200,
+    body: event,
+  };
+  console.log({response: JSON.stringify(response)});
 
-const {startDt, endDt} = getDts(new Date(), 2);
+  const WINDOW_LENGTH_HOURS = 2;
 
-const assertion = generateAssertion();
-getToken(assertion)
-    .then((response) => response.text())
-    .then((tokenBody) => {
-      console.log(tokenBody);
+  // {
+  //   "sReceivedTimestamp": "Tue, 30 Mar 2021 12:25:05 +0000",
+  //   "sCustomerName": "First Last",
+  //   "sCustomerEmail": "first.last@example.com",
+  //   "sCustomerNumber": "+1 (555) 555-5555"
+  // }
+  const message = response.body['Records'][0]['Sns']['Message'];
+  const messageJson = JSON.parse(message);
+  const {
+    startDt,
+    endDt,
+  } = getDts(messageJson.sReceivedTimestamp, WINDOW_LENGTH_HOURS);
 
-      const token = (JSON.parse(tokenBody)).access_token;
-      endDt.setHours(startDt.getHours() + 2);
+  const assertion = generateAssertion();
+  getToken(assertion)
+      .then((response) => response.text())
+      .then((tokenBody) => {
+        console.log(tokenBody);
 
-      const summary = uuidv4();
-      const description = uuidv4();
+        const token = (JSON.parse(tokenBody)).access_token;
+        endDt.setHours(startDt.getHours() + 2);
 
-      createEvent(summary, description, startDt, endDt, token)
-          .then((response) => response.text())
-          .then((eventBody) => console.log(eventBody));
-    });
+        const summary = messageJson.sCustomerName;
+        const description = messageJson.sCustomerEmail +
+                            '\n' +
+                            messageJson.sCustomerNumber +
+                            '\n' +
+                            '\n' +
+                            uuidv4();
 
-// exports.handler = async (event) => {
-//   const response = {
-//     statusCode: 200,
-//     body: event,
-//   };
-//   console.log({response: JSON.stringify(response)});
+        createEvent(summary, description, startDt, endDt, token)
+            .then((response) => response.text())
+            .then((eventBody) => console.log(eventBody));
+      });
 
-//   const WINDOW_LENGTH_HOURS = 2;
-
-//   const message = response.body['Records'][0]['Sns']['Message'];
-//   const messageJson = JSON.parse(message);
-
-//   let {startDt, endDt} = getDts(messageJson.sReceivedTimestamp, WINDOW_LENGTH_HOURS);
-
-//   const assertion = generateAssertion();
-//   getToken(assertion)
-//       .then((response) => response.text())
-//       .then((tokenBody) => {
-//         console.log(tokenBody);
-
-//         const token = (JSON.parse(tokenBody)).access_token;
-//         const startDt = new Date();
-//         const endDt = new Date(startDt.getTime());
-//         endDt.setHours(startDt.getHours() + 2);
-//         const summary = uuidv4();
-
-//         createEvent(summary, uuidv4(), startDt, endDt, token)
-//             .then((response) => response.text())
-//             .then((eventBody) => console.log(eventBody));
-//       });
-
-//   return 0;
-// };
+  return 0;
+};
