@@ -11,5 +11,10 @@
   "devDependencies": {
     "eslint": "^7.23.0",
     "eslint-config-google": "^0.14.0"
+  },
+  "dependencies": {
+    "dotenv": "^8.2.0",
+    "jsonwebtoken": "^8.5.1",
+    "node-fetch": "^2.6.1"
   }
 }
