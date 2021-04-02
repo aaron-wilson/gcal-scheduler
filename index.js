@@ -1,25 +1,18 @@
+require('dotenv').config();
+
 const jwt = require('jsonwebtoken');
 const fetch = require('node-fetch');
-require('dotenv').config();
+const AWS = require('aws-sdk');
+
+const email = require('./email');
 
 /**
  * @return {string}
  */
-function generateAssertion() {
-  return jwt.sign({
-    'iss': process.env.SERVICE_ACCOUNT,
-    'sub': process.env.SERVICE_ACCOUNT,
-    'aud': 'https://www.googleapis.com/oauth2/v4/token',
-    'scope': 'https://www.googleapis.com/auth/calendar',
-  },
-  process.env.PRIVATE_KEY.replace(/\\n/g, '\n'),
-  {
-    expiresIn: 60 * 59,
-    header: {
-      'alg': 'RS256',
-      'typ': 'JWT',
-      'kid': process.env.KID,
-    },
+function uuid4() {
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+    const r = Math.random() * 16 | 0; const v = c == 'x' ? r : (r & 0x3 | 0x8);
+    return v.toString(16);
   });
 }
 
@@ -34,60 +27,6 @@ function generateFormBody(object) {
     formBody.push(encodedKey + '=' + encodedValue);
   }
   return formBody.join('&');
-}
-
-/**
- * @return {Promise}
- */
-async function getToken(assertion) {
-  const response = await fetch('https://www.googleapis.com/oauth2/v4/token', {
-    method: 'POST',
-    headers: {'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8'},
-    body: generateFormBody({
-      'grant_type': 'urn:ietf:params:oauth:grant-type:jwt-bearer',
-      assertion,
-    }),
-  });
-  return response;
-}
-
-/**
- * @return {Promise}
- */
-async function createEvent(summary, description, startDt, endDt, token) {
-  const requestBody = {
-    summary,
-    description,
-    'start': {
-      'dateTime': startDt.toISOString(),
-      'timeZone': 'America/New_York',
-    },
-    'end': {
-      'dateTime': endDt.toISOString(),
-      'timeZone': 'America/New_York',
-    },
-  };
-  console.log({requestBody});
-
-  const response = await fetch(`https://www.googleapis.com/calendar/v3/calendars/${process.env.CALENDAR_ID}/events`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json;charset=UTF-8',
-      'Authorization': `Bearer ${token}`,
-    },
-    body: JSON.stringify(requestBody),
-  });
-  return response;
-}
-
-/**
- * @return {string}
- */
-function uuid4() {
-  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
-    const r = Math.random() * 16 | 0; const v = c == 'x' ? r : (r & 0x3 | 0x8);
-    return v.toString(16);
-  });
 }
 
 /**
@@ -162,6 +101,168 @@ function getDts(receivedTimestamp, windowLengthHours) {
   return {startDt, endDt};
 }
 
+/**
+ * @return {string}
+ */
+function generateReplacementText(startDt, endDt) {
+  const dateString = startDt.toLocaleDateString('en-US', {timeZone: 'America/New_York'});
+  const startTimeString = startDt
+      .toLocaleTimeString('en-US', {timeZone: 'America/New_York'})
+      .replace(':00:00', '');
+  const endTimeString = endDt
+      .toLocaleTimeString('en-US', {timeZone: 'America/New_York'})
+      .replace(':00:00', '');
+
+  return `${startTimeString} and ${endTimeString} on ${dateString}`;
+}
+
+/**
+ * @return {string}
+ */
+function generateAssertion() {
+  return jwt.sign({
+    'iss': process.env.SERVICE_ACCOUNT,
+    'sub': process.env.SERVICE_ACCOUNT,
+    'aud': 'https://www.googleapis.com/oauth2/v4/token',
+    'scope': 'https://www.googleapis.com/auth/calendar',
+  },
+  process.env.PRIVATE_KEY.replace(/\\n/g, '\n'),
+  {
+    expiresIn: 60 * 59,
+    header: {
+      'alg': 'RS256',
+      'typ': 'JWT',
+      'kid': process.env.KID,
+    },
+  });
+}
+
+/**
+ * @return {string}
+ */
+async function getToken(assertion) {
+  const response = await fetch('https://www.googleapis.com/oauth2/v4/token', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8'},
+    body: generateFormBody({
+      'grant_type': 'urn:ietf:params:oauth:grant-type:jwt-bearer',
+      assertion,
+    }),
+  });
+  const responseObj = await response.json();
+  console.log({responseObj});
+
+  return responseObj.access_token;
+}
+
+/**
+ * @return {Object}
+ */
+async function createEvent(summary, description, startDt, endDt, token) {
+  const requestBody = {
+    summary,
+    description,
+    'start': {
+      'dateTime': startDt.toISOString(),
+      'timeZone': 'America/New_York',
+    },
+    'end': {
+      'dateTime': endDt.toISOString(),
+      'timeZone': 'America/New_York',
+    },
+  };
+  console.log({requestBody});
+
+  const response = await fetch(`https://www.googleapis.com/calendar/v3/calendars/${process.env.CALENDAR_ID}/events`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json;charset=UTF-8',
+      'Authorization': `Bearer ${token}`,
+    },
+    body: JSON.stringify(requestBody),
+  });
+  const responseObj = await response.json();
+  console.log({responseObj});
+
+  return responseObj;
+}
+
+/**
+ * @return {Promise}
+ */
+function snsPublish(message, topicArn) {
+  // Create publish parameters
+  const params = {
+    Message: message,
+    TopicArn: topicArn,
+  };
+  console.log({params});
+
+  // Create promise and SNS service object
+  const publishTextPromise = new AWS
+      .SNS({apiVersion: '2010-03-31'})
+      .publish(params)
+      .promise();
+
+  // // Handle promise's fulfilled/rejected states
+  // publishTextPromise
+  //     .then(function(data) {
+  //     })
+  //     .catch(function(err) {
+  //     });
+  console.log({message: 'publishing to SNS'});
+
+  return publishTextPromise;
+}
+
+/**
+ * @return {Promise}
+ */
+function sesEmail(fromEmail, toEmail, bccEmail, subject, htmlBody) {
+  // Create sendEmail params
+  const params = {
+    Destination: {
+      BccAddresses: [
+        bccEmail,
+      ],
+      ToAddresses: [
+        toEmail,
+      ],
+    },
+    Message: {
+      Body: {
+        Html: {
+          Charset: 'UTF-8',
+          Data: htmlBody,
+        },
+      },
+      Subject: {
+        Charset: 'UTF-8',
+        Data: subject,
+      },
+    },
+    Source: fromEmail,
+    // ReplyToAddresses: [
+    //   fromEmail,
+    // ],
+  };
+
+  // Create the promise and SES service object
+  const sendPromise = new AWS.SES({apiVersion: '2010-12-01'}).sendEmail(params).promise();
+
+  // // Handle promise's fulfilled/rejected states
+  // sendPromise.then(
+  //     function(data) {
+  //       console.log(data.MessageId);
+  //     }).catch(
+  //     function(err) {
+  //       console.error(err, err.stack);
+  //     });
+  console.log({message: 'sending email'});
+
+  return sendPromise;
+}
+
 exports.handler = async (event) => {
   console.log({event: JSON.stringify(event)});
 
@@ -175,31 +276,36 @@ exports.handler = async (event) => {
   // }
   const message = event['Records'][0]['Sns']['Message'];
   console.log({message});
-  const messageJson = JSON.parse(message);
+  const messageObj = JSON.parse(message);
+
   const {
     startDt,
     endDt,
-  } = getDts(messageJson.sReceivedTimestamp, WINDOW_LENGTH_HOURS);
+  } = getDts(messageObj.sReceivedTimestamp, WINDOW_LENGTH_HOURS);
+  const summary = messageObj.sCustomerName;
+  const description = messageObj.sCustomerEmail +
+                      '\n' +
+                      messageObj.sCustomerNumber +
+                      '\n' +
+                      '\n' +
+                      uuid4();
+  const snsMessage = process.env.SNS_PUBLISH_MESSAGE;
+  const snsTopicArn = process.env.SNS_PUBLISH_TOPIC_ARN;
+  const fromEmail = process.env.FROM_EMAIL;
+  const toEmail = messageObj.sCustomerEmail;
+  const bccEmail = process.env.BCC_EMAIL;
+  const subject = process.env.SUBJECT;
+  const htmlBody = email
+      .htmlBody
+      .replace('$$replace$$', generateReplacementText(startDt, endDt));
 
-  const assertion = generateAssertion();
-  return getToken(assertion)
-      .then((response) => response.text())
-      .then((tokenBody) => {
-        console.log(tokenBody);
-
-        const token = (JSON.parse(tokenBody)).access_token;
-        const summary = messageJson.sCustomerName;
-        const description = messageJson.sCustomerEmail +
-                            '\n' +
-                            messageJson.sCustomerNumber +
-                            '\n' +
-                            '\n' +
-                            uuid4();
-
-        return createEvent(summary, description, startDt, endDt, token)
-            .then((response) => response.text())
-            .then((eventBody) => console.log(eventBody))
-            .catch((error) => console.log(error));
-      })
-      .catch((error) => console.log(error));
+  try {
+    const assertion = generateAssertion();
+    const token = await getToken(assertion);
+    await createEvent(summary, description, startDt, endDt, token);
+    await snsPublish(snsMessage, snsTopicArn);
+    await sesEmail(fromEmail, toEmail, bccEmail, subject, htmlBody);
+  } catch (err) {
+    console.error({err});
+  }
 };

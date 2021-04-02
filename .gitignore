@@ -1,5 +1,6 @@
 .env
 *.zip
+email.js
 
 # Logs
 logs
