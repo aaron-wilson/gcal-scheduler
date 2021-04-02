@@ -204,14 +204,7 @@ function snsPublish(message, topicArn) {
       .publish(params)
       .promise();
 
-  // // Handle promise's fulfilled/rejected states
-  // publishTextPromise
-  //     .then(function(data) {
-  //     })
-  //     .catch(function(err) {
-  //     });
   console.log({message: 'publishing to SNS'});
-
   return publishTextPromise;
 }
 
@@ -242,24 +235,12 @@ function sesEmail(fromEmail, toEmail, bccEmail, subject, htmlBody) {
       },
     },
     Source: fromEmail,
-    // ReplyToAddresses: [
-    //   fromEmail,
-    // ],
   };
 
   // Create the promise and SES service object
   const sendPromise = new AWS.SES({apiVersion: '2010-12-01'}).sendEmail(params).promise();
 
-  // // Handle promise's fulfilled/rejected states
-  // sendPromise.then(
-  //     function(data) {
-  //       console.log(data.MessageId);
-  //     }).catch(
-  //     function(err) {
-  //       console.error(err, err.stack);
-  //     });
   console.log({message: 'sending email'});
-
   return sendPromise;
 }
 
