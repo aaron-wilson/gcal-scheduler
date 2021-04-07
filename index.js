@@ -19,6 +19,15 @@ function uuid4() {
 /**
  * @return {string}
  */
+function titleCase(str) {
+  return str.split(' ')
+      .map((s) => s[0].toUpperCase() + s.substring(1))
+      .join(' ');
+}
+
+/**
+ * @return {string}
+ */
 function generateFormBody(object) {
   const formBody = [];
   for (const property in object) {
@@ -263,7 +272,7 @@ exports.handler = async (event) => {
     startDt,
     endDt,
   } = getDts(messageObj.sReceivedTimestamp, WINDOW_LENGTH_HOURS);
-  const summary = messageObj.sCustomerName;
+  const summary = titleCase(messageObj.sCustomerName);
   const description = messageObj.sCustomerEmail +
                       '\n' +
                       messageObj.sCustomerNumber +
