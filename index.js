@@ -20,9 +20,14 @@ function uuid4() {
  * @return {string}
  */
 function titleCase(str) {
-  return str.split(' ')
-      .map((s) => s[0].toUpperCase() + s.substring(1))
-      .join(' ');
+  try {
+    return str.split(' ')
+        .map((s) => s[0].toUpperCase() + s.substring(1))
+        .join(' ');
+  } catch (err) {
+    console.error({err});
+    return str;
+  }
 }
 
 /**
@@ -114,7 +119,8 @@ function getDts(receivedTimestamp, windowLengthHours) {
  * @return {string}
  */
 function generateReplacementText(startDt, endDt) {
-  const dateString = startDt.toLocaleDateString('en-US', {timeZone: 'America/New_York'});
+  const dateString = startDt
+      .toLocaleDateString('en-US', {timeZone: 'America/New_York'});
   const startTimeString = startDt
       .toLocaleTimeString('en-US', {timeZone: 'America/New_York'})
       .replace(':00:00', '');
@@ -271,18 +277,13 @@ exports.handler = async (event) => {
   const {
     startDt,
     endDt,
-  } = getDts(messageObj.sReceivedTimestamp, WINDOW_LENGTH_HOURS);
-  const summary = titleCase(messageObj.sCustomerName);
-  const description = messageObj.sCustomerEmail +
-                      '\n' +
-                      messageObj.sCustomerNumber +
-                      '\n' +
-                      '\n' +
-                      uuid4();
+  } = getDts(messageObj.sReceivedTimestamp.trim(), WINDOW_LENGTH_HOURS);
+  const summary = titleCase(messageObj.sCustomerName.trim());
+  const description = uuid4();
   const snsMessage = process.env.SNS_PUBLISH_MESSAGE;
   const snsTopicArn = process.env.SNS_PUBLISH_TOPIC_ARN;
   const fromEmail = process.env.FROM_EMAIL;
-  const toEmail = messageObj.sCustomerEmail;
+  const toEmail = messageObj.sCustomerEmail.trim();
   const bccEmail = process.env.BCC_EMAIL;
   const subject = process.env.SUBJECT;
   const htmlBody = email
