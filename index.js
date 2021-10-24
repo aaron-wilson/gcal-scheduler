@@ -106,6 +106,20 @@ function getDts(receivedTimestamp, windowLengthHours) {
     isoString = `${etYear}-${etMonth}-${etDay}T09:00:00${offsetHoursString}:00`;
     startDt = new Date(isoString);
     startDt.setHours(startDt.getHours() + 48);
+  } else {
+    // unexpected etHours
+
+    // 0900 delivery window following day
+    isoString = `${etYear}-${etMonth}-${etDay}T09:00:00${offsetHoursString}:00`;
+    startDt = new Date(isoString);
+    startDt.setHours(startDt.getHours() + 24);
+
+    console.log({
+      message: 'Unexpected etHours. Using default.',
+      etHours,
+      isoString,
+      startDt,
+    });
   }
   const endDt = new Date(startDt.getTime());
   endDt.setHours(startDt.getHours() + windowLengthHours);
